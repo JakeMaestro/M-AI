@@ -5,7 +5,7 @@ from websocket import create_connection
 ARI_USER = "mvoice"
 ARI_PASS = "mvoice8908!#"
 BASE = "http://127.0.0.1:8088/ari"
-APP  = "mvoice"
+APP = "mai"
 
 def play(channel_id, media):
     qs = urllib.parse.urlencode({"media": media})
