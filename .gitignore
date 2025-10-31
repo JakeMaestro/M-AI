@@ -1,0 +1,13 @@
+# niemals echte Secrets committen
+config/.env
+voiceai-secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.der
+*.jks
+# Build/Runtime-Artefakte
+__pycache__/
+*.pyc
+.env
