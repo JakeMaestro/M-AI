@@ -1,13 +1,14 @@
 services:
   edge:
+    restart: unless-stopped
     build:
       context: ./services/edge
     volumes:
       - ./services/edge/etc/asterisk:/etc/asterisk
       - ./services/edge/var/lib/asterisk:/var/lib/asterisk
-    restart: unless-stopped
 
   orchestrator:
+    restart: unless-stopped
     build:
       context: ./services/orchestrator
     ports:
@@ -16,4 +17,3 @@ services:
       - ./config/.env
     volumes:
       - ./flows:/app/flows:ro
-    restart: unless-stopped

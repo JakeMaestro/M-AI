@@ -14,13 +14,13 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Asterisk-Configs ins Image
-COPY services/edge/etc/asterisk/ /etc/asterisk/
+COPY etc/asterisk/ /etc/asterisk/
 
 # ARI-App ins Image
-COPY services/edge/ari_app.py /opt/mai/ari_app.py
+COPY ari_app.py /opt/mai/ari_app.py
 
 # Entrypoint für Autostart (ARI-App + Asterisk im Vordergrund)
-COPY services/edge/entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
