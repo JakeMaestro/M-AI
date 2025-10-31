@@ -84,3 +84,22 @@ Non-technical users can change these with a small admin panel (to be added).
 - Phase 4: High availability (2× edges + SBC) and regional scaling.
 
 See `docs/architecture.md` for details.
+
+## MVP Runbook
+
+### Start
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+```
+
+### Checks
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge asterisk -rx "http show status"
+docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge asterisk -rx "pjsip show registrations"
+```
+
+### Logs
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml logs -f edge
+docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge tail -n 200 /var/log/mvoice/ari_app.log
+```
