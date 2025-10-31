@@ -1,6 +1,9 @@
 services:
   edge:
-    build:
+    
+      
+      build:
+        context: ./services/edgeimage: m-voice-edge:latestbuild:
       context: .
       dockerfile: services/edge/Dockerfile
     image: m-ai-edge
