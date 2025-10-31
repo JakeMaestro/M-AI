@@ -22,3 +22,9 @@ services/edge/var/
 services/orchestrator/.env
 voiceai-secrets/
 config/.env
+config/.env*
+services/**/.env
+services/**/.env.*
+**/*.bak.*
+data/
+**/*.log
