@@ -19,3 +19,6 @@ services/edge/var/
 *.p12
 *.der
 *.jks
+services/orchestrator/.env
+voiceai-secrets/
+config/.env
