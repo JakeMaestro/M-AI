@@ -1,5 +1,5 @@
 
-# VoiceAI — SIP→Azure Speech MVP (Starter)
+# M-Voice — SIP→Azure Speech MVP (Starter)
 
 This repository is a **minimal, Docker-first scaffold** to build an MVP for a
 phone-accessible AI assistant that connects SIP calls to Azure Speech and handles
