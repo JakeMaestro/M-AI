@@ -11,3 +11,11 @@ voiceai-secrets/
 __pycache__/
 *.pyc
 .env
+services/orchestrator/.env
+services/edge/var/
+*.pem
+*.key
+*.crt
+*.p12
+*.der
+*.jks
