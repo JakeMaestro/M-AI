@@ -36,8 +36,8 @@ simple workflows (e.g., restaurant reservations, pizza ordering, appointment boo
 
 2. **Clone & configure**  
    ```bash
-   git clone <YOUR_GITHUB_FORK_URL> voiceai
-   cd voiceai
+   git clone <YOUR_GITHUB_FORK_URL> mvoice
+   cd mvoice
    cp config/.env.example config/.env
    # Edit config/.env and fill in Azure keys & SIP trunk details
    ```

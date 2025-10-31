@@ -1,72 +1,120 @@
+import os, time, base64, threading, traceback, logging
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse, PlainTextResponse
 
-from fastapi import FastAPI, WebSocket, HTTPException
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-import yaml, os, sqlite3, time, pathlib
+app = FastAPI(title="M-Voice Orchestrator", version="0.1.0")
 
-app = FastAPI(title="VoiceAI Orchestrator", version="0.1.0")
+# Logger
+log = logging.getLogger("mvoice.orch")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-DB_PATH = os.environ.get("DB_PATH", "/app/data/voiceai.db")
-FLOWS_DIR = pathlib.Path("/app/flows")
+_is_ws_connected = False
+_stop = False
+_last_event_ts = 0.0
+_ws_restarts = 0
 
-class Outcome(BaseModel):
-    call_id: str
-    customer: str
-    intent: str
-    data: dict
+def _build_ws_url():
+    u = os.getenv("ARI_USERNAME", "mvoice")
+    p = os.getenv("ARI_PASSWORD", "mvoice8908!#")
+    appname = os.getenv("ARI_APP", "mvoice")
+    base = os.getenv("ARI_URL", "http://edge:8088/ari").rstrip("/")
 
-def init_db():
-    os.makedirs("/app/data", exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS outcomes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ts INTEGER,
-                call_id TEXT,
-                customer TEXT,
-                intent TEXT,
-                data TEXT
+    scheme = "wss" if base.startswith("https://") else "ws"
+    host = base.split("://", 1)[1]
+    if not host.endswith("/ari"):
+        host += "/ari"
+    url = f"{scheme}://{host}/events?app={appname}&subscribeAll=true"
+    token = base64.b64encode(f"{u}:{p}".encode()).decode()
+    headers = [f"Authorization: Basic {token}"]
+    return url, headers
+
+def _ws_forever():
+    """
+    Persistent ARI WebSocket with keepalives and bounded backoff.
+    Presence is enough to keep Stasis(app) active.
+    """
+    global _is_ws_connected, _ws_restarts
+    import websocket  # websocket-client
+
+    backoff = 1
+    while not _stop:
+        try:
+            url, headers = _build_ws_url()
+            log.info("WS: connecting to %s", url)
+            _ws_restarts += 1
+
+            def on_open(ws):
+                global _is_ws_connected
+                _is_ws_connected = True
+                log.info("WS: connected")
+
+            def on_close(ws, code, msg):
+                global _is_ws_connected
+                _is_ws_connected = False
+                log.warning("WS: closed code=%s msg=%s", code, msg)
+
+            def on_error(ws, err):
+                global _is_ws_connected
+                _is_ws_connected = False
+                log.error("WS: error: %s", err)
+
+            def on_message(ws, _msg):
+                # Presence; record we've seen traffic
+                global _last_event_ts
+                _last_event_ts = time.time()
+                # Log a short summary (avoid noisy dumps)
+                try:
+                    if _msg and isinstance(_msg, (str, bytes)):
+                        s = _msg if isinstance(_msg, str) else _msg.decode(errors="ignore")
+                        log.info("WS evt: %s", s[:200])
+                except Exception:
+                    pass
+
+            ws = websocket.WebSocketApp(
+                url,
+                header=headers,
+                on_open=on_open,
+                on_close=on_close,
+                on_error=on_error,
+                on_message=on_message,
             )
-        """)
-init_db()
+            ws.run_forever(ping_interval=20, ping_timeout=10)
+        except Exception:
+            _is_ws_connected = False
+            log.error("WS: exception\n%s", traceback.format_exc())
 
-@app.get("/healthz")
+        time.sleep(min(backoff, 30))
+        backoff = min(backoff * 2, 30)
+
+@app.on_event("startup")
+def _startup():
+    log.info("Starting WS background thread…")
+    t = threading.Thread(target=_ws_forever, daemon=True)
+    t.start()
+
+@app.on_event("shutdown")
+def _shutdown():
+    global _stop
+    _stop = True
+    log.info("Stopping WS background thread…")
+
+@app.get("/health")
 def health():
-    return {"ok": True}
+    return JSONResponse({"ws_connected": _is_ws_connected})
 
-@app.get("/docs-note")
-def docs_note():
-    return JSONResponse({"note": "FastAPI auto-docs at /docs"})
+@app.get("/ready")
+def ready():
+    """Readiness: WS must be up and (best-effort) we saw an event in last 60s."""
+    ok = _is_ws_connected and (time.time() - _last_event_ts < 60 if _last_event_ts else True)
+    status = 200 if ok else 503
+    return PlainTextResponse("ready" if ok else "not-ready", status_code=status)
 
-@app.get("/flows")
-def list_flows():
-    items = []
-    for p in FLOWS_DIR.glob("*.yaml"):
-        items.append(p.name)
-    return {"flows": items}
-
-@app.get("/flows/{name}")
-def get_flow(name: str):
-    p = FLOWS_DIR / name
-    if not p.exists():
-        raise HTTPException(404, "Flow not found")
-    return yaml.safe_load(p.read_text())
-
-class OutcomeIn(BaseModel):
-    call_id: str
-    customer: str
-    intent: str
-    data: dict
-
-@app.post("/outcome")
-def save_outcome(outcome: OutcomeIn):
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(
-            "INSERT INTO outcomes (ts, call_id, customer, intent, data) VALUES (?,?,?,?,?)",
-            (int(time.time()), outcome.call_id, outcome.customer, outcome.intent, yaml.safe_dump(outcome.data)),
-        )
-    return {"status": "saved"}
-
-# TODO:
-# - Implement Asterisk ARI control and media bridging to Azure Speech.
-# - STT/TTS clients (httpx websockets) with streaming.
+@app.get("/metrics")
+def metrics():
+    """Tiny text metrics."""
+    lines = [
+        f'mvoice_ws_connected {int(_is_ws_connected)}',
+        f'mvoice_ws_restarts {_ws_restarts}',
+        f'mvoice_last_event_ts {_last_event_ts or 0.0}',
+    ]
+    return PlainTextResponse("\n".join(lines), media_type="text/plain")

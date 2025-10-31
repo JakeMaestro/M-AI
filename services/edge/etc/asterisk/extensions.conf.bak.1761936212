@@ -3,18 +3,15 @@ static=yes
 writeprotect=no
 
 [incoming]
-exten => 43720270346,1,NoOp(M-Voice inbound ${EXTEN})
+exten => _X.,1,NoOp(M-Voice: Call received for )
  same => n,Answer()
- same => n,Stasis(mvoice,incoming)
+ same => n,NoOp(Sending call to M-Voice Orchestrator)
+ same => n,Stasis(mvoice)
  same => n,Hangup()
+
 [mvoice-test]
 exten => 4444,1,NoOp(M-Voice test call)
  same => n,Answer()
  same => n,Playback(hello-world)
  same => n,Stasis(mvoice)
- same => n,Hangup()
-[incoming]
-exten => 43720270346,1,NoOp(M-Voice inbound ${EXTEN})
- same => n,Answer()
- same => n,Stasis(mvoice,incoming)
  same => n,Hangup()

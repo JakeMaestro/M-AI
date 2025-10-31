@@ -5,6 +5,8 @@ writeprotect=no
 [incoming]
 exten => 43720270346,1,NoOp(M-Voice inbound ${EXTEN})
  same => n,Answer()
+ same => n,Playback(hello-world)
+ same => n,NoOp(Hand-over to ARI)
  same => n,Stasis(mvoice,incoming)
  same => n,Hangup()
 [mvoice-test]
@@ -16,5 +18,7 @@ exten => 4444,1,NoOp(M-Voice test call)
 [incoming]
 exten => 43720270346,1,NoOp(M-Voice inbound ${EXTEN})
  same => n,Answer()
+ same => n,Playback(hello-world)
+ same => n,NoOp(Hand-over to ARI)
  same => n,Stasis(mvoice,incoming)
  same => n,Hangup()

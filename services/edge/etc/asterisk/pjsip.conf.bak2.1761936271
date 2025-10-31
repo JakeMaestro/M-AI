@@ -4,8 +4,8 @@ user_agent=M-Voice-Asterisk
 endpoint_identifier_order=ip,username,anonymous
 
 [transport-udp]
-external_signaling_address=134.149.217.100
-external_media_address=134.149.217.100
+external_media_address=YOUR.PUBLIC.IP
+external_signaling_address=YOUR.PUBLIC.IP
 type=transport
 protocol=udp
 bind=0.0.0.0:5060
@@ -23,14 +23,6 @@ contact=sip:sip.peoplefone.at:5060
 qualify_frequency=60
 
 [peoplefone-endpoint]
-type=endpoint
-context=incoming
-disallow=all
-allow=alaw,ulaw
-direct_media=no
-force_rport=yes
-rtp_symmetric=yes
-rewrite_contact=yes
 type=endpoint
 transport=transport-udp
 context=incoming
@@ -63,14 +55,3 @@ endpoint=peoplefone-endpoint
 match=95.128.80.5
 match=95.128.84.2
 match=sip.peoplefone.at
-
-[peoplefone-endpoint]
-type=endpoint
-context=incoming
-disallow=all
-allow=alaw,ulaw
-direct_media=no
-force_rport=yes
-rtp_symmetric=yes
-rewrite_contact=yes
-inband_progress=no
