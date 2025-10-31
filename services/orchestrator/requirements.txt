@@ -5,3 +5,5 @@ pydantic==2.9.2
 PyYAML==6.0.2
 httpx==0.27.2
 sqlite-utils==3.37
+websocket-client
+requests

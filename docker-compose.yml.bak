@@ -1,0 +1,19 @@
+services:
+  edge:
+    build:
+      context: ./services/edge
+    volumes:
+      - ./services/edge/etc/asterisk:/etc/asterisk
+      - ./services/edge/var/lib/asterisk:/var/lib/asterisk
+    restart: unless-stopped
+
+  orchestrator:
+    build:
+      context: ./services/orchestrator
+    ports:
+      - "18080:8080"
+    env_file:
+      - ./config/.env
+    volumes:
+      - ./flows:/app/flows:ro
+    restart: unless-stopped

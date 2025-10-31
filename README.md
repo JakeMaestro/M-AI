@@ -36,8 +36,8 @@ simple workflows (e.g., restaurant reservations, pizza ordering, appointment boo
 
 2. **Clone & configure**  
    ```bash
-   git clone <YOUR_GITHUB_FORK_URL> voiceai
-   cd voiceai
+   git clone <YOUR_GITHUB_FORK_URL> mvoice
+   cd mvoice
    cp config/.env.example config/.env
    # Edit config/.env and fill in Azure keys & SIP trunk details
    ```
@@ -84,3 +84,22 @@ Non-technical users can change these with a small admin panel (to be added).
 - Phase 4: High availability (2× edges + SBC) and regional scaling.
 
 See `docs/architecture.md` for details.
+
+## MVP Runbook
+
+### Start
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+```
+
+### Checks
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge asterisk -rx "http show status"
+docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge asterisk -rx "pjsip show registrations"
+```
+
+### Logs
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml logs -f edge
+docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge tail -n 200 /var/log/mvoice/ari_app.log
+```

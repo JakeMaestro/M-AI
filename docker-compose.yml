@@ -1,21 +1,16 @@
 services:
   edge:
     build:
-      context: ./services/edge
-    container_name: voiceai-edge
-    volumes:
-      - ./services/edge/etc/asterisk:/etc/asterisk
-      - ./services/edge/var/lib/asterisk:/var/lib/asterisk
+      context: .
+      dockerfile: services/edge/Dockerfile
+    image: m-ai-edge
     restart: unless-stopped
+    # optional: Logs auf Host
+    # volumes:
+    #   - ./logs:/var/log/mvoice
 
   orchestrator:
-    build:
-      context: ./services/orchestrator
-    container_name: voiceai-orchestrator
-    ports:
-      - "8080:8080"
-    env_file:
-      - ./config/.env
-    volumes:
-      - ./flows:/app/flows:ro
+    image: m-ai-orchestrator
     restart: unless-stopped
+    ports:
+      - "18080:8080"
