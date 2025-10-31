@@ -2,7 +2,6 @@ services:
   edge:
     build:
       context: ./services/edge
-    container_name: voiceai-edge
     volumes:
       - ./services/edge/etc/asterisk:/etc/asterisk
       - ./services/edge/var/lib/asterisk:/var/lib/asterisk
@@ -11,7 +10,6 @@ services:
   orchestrator:
     build:
       context: ./services/orchestrator
-    container_name: voiceai-orchestrator
     ports:
       - "8080:8080"
     env_file:
