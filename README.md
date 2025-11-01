@@ -1,43 +1,25 @@
-(PASTE HIER DEN NEUEN README TEXT REIN)
-
-# 2. Änderungen anzeigen (optional)
-git status
-git diff README.md
-
-# 3. Commit
-git add README.md
-git commit -m "docs: update README and troubleshooting steps"
-
-# 4. Push zur main
-git push origin main
-
-# 5. Optional Release Tag erstellen
-git tag -a v1.0.3 -m "v1.0.3 updated README and deployment instructions"
-git push origin v1.0.3
-
-
 # M-AI Voice Edge & Orchestrator
 
 Dieses Projekt stellt eine modulare Voice-Agent Architektur bereit, bestehend aus:
 
-| Komponente     | Aufgabe                                                                 |
-|----------------|-------------------------------------------------------------------------|
-| **edge**       | SIP Signalisierung + RTP Media Handling via Asterisk (PJSIP).           |
-| **orchestrator** | Verbindung zum Asterisk ARI (WebSocket), Eventverarbeitung, State-Flow. |
-| **client(s)**  | Stimm-Bots, Workflows, TTS / STT, Logik.                                |
+| Komponente       | Aufgabe                                                                 |
+|------------------|-------------------------------------------------------------------------|
+| **edge**         | SIP Signalisierung + RTP Media Handling via Asterisk (PJSIP).           |
+| **orchestrator** | Verbindung zu Asterisk ARI (WebSocket), Eventverarbeitung, Stateflow.   |
+| **client(s)**    | Stimm-Bots, Workflows, TTS / STT, Business-Logik.                       |
 
 ---
 
-## Start
+## 🚀 Start
 
 ```bash
 docker compose up -d
-Nach dem Start stehen folgende Health Endpoints zur Verfügung:
+Nach dem Start stehen folgende Health Endpoints bereit:
 
-Endpoint	Beschreibung	Status-Kriterium
-/healthz	lebt der Prozess?	Orchestrator gestartet
-/healthz/deps	kann Orchestrator mit Edge sprechen?	HTTP erreichbar + ARI-Auth
-/readyz	System betriebsbereit?	Edge gesund + ARI Auth + WebSocket verbunden
+Endpoint	Beschreibung	Zustandskriterium
+/healthz	Prozess lebt	Orchestrator läuft
+/healthz/deps	Edge + ARI HTTP Auth erreichbar	System Grundfunktionen ok
+/readyz	Vollständig bereit (inkl. WebSocket verbunden)	produktionsbereit
 
 Beispiele
 bash
@@ -45,9 +27,7 @@ Code kopieren
 curl -s http://127.0.0.1:18080/healthz | jq .
 curl -s http://127.0.0.1:18080/healthz/deps | jq .
 curl -s http://127.0.0.1:18080/readyz | jq .
-Asterisk ARI Zugang
-ari.conf
-
+🔐 Asterisk ARI Konfiguration (/etc/asterisk/ari.conf)
 ini
 Code kopieren
 [general]
@@ -59,17 +39,15 @@ allowed_origins = *
 type = user
 read_only = no
 password = mvoice8908!#
-Orchestrator ARI WebSocket Verbindung
-Die ARI-WebSocket-URL wird dynamisch generiert:
+🔗 ARI WebSocket Verbindung
+Die Verbindung wird automatisch generiert:
 
-python
+bash
 Code kopieren
 ws://edge:8088/ari/events?app=mai&subscribeAll=true&api_key=mai:mvoice8908!#
-(Inklusive URL-Sicherheit — Sonderzeichen werden korrekt encodiert.)
+Sonderzeichen (!) und (#) werden korrekt encodiert, daher stabil.
 
-Wichtig:
-Credential-Pass-Through erfolgt über docker-compose.yml:
-
+🧩 Orchestrator ARI Credentials (docker-compose.yml)
 yaml
 Code kopieren
 environment:
@@ -77,16 +55,18 @@ environment:
   ARI_PORT: "8088"
   ARI_USER: mai
   ARI_PASSWORD: mvoice8908!#
-Readiness-Logik
-Der Orchestrator wird erst als „bereit“ markiert, wenn:
+✅ Readiness-Logik
+Der Orchestrator meldet sich erst ready, wenn:
 
 Edge läuft und ist healthy
 
-ARI HTTP Basic Auth funktioniert
+ARI HTTP Basic Auth erfolgreich
 
 WebSocket stabil verbunden
 
-Dies wird über /readyz abgebildet:
+Mindestens ein ARI-Event empfangen wurde (State aktiv)
+
+Beispiel /readyz Output:
 
 json
 Code kopieren
@@ -96,9 +76,9 @@ Code kopieren
   "ari_auth": true,
   "ws_connected": true
 }
-⚙️ Troubleshooting
+🛠 Troubleshooting
 1) /readyz zeigt "ari_auth": false
-Ursache: ARI Credentials falsch, nicht übereinstimmend oder vergessen.
+Ursache: Credentials zwischen ari.conf und docker-compose.yml stimmen nicht überein.
 
 Check:
 
@@ -106,39 +86,29 @@ bash
 Code kopieren
 docker exec -t $(docker compose ps -q edge) asterisk -rx "http show status"
 docker exec -t $(docker compose ps -q edge) awk 'NF && $1 !~ /^;/' /etc/asterisk/ari.conf
-Fix:
-docker-compose.yml und ari.conf müssen dieselben Werte haben.
-
-2) Logs zeigen: Handshake status 401 Unauthorized
-Ursache: WebSocket ohne Auth / falsches Password
-
-Fix:
-Stelle sicher, dass die WebSocket-URL api_key=user:pass enthält.
-
-Soll so aussehen:
-
-bash
+2) Logs zeigen:
+lua
 Code kopieren
-ws://edge:8088/ari/events?...&api_key=mai:mvoice8908!#
-3) WebSocket disconnects alle ~60s
-Ursache: Ping fehlt.
+Handshake status 401 Unauthorized
+Fix: Stelle sicher, dass die URL &api_key=user:pass enthält.
 
-Fix:
-ws.run_forever(ping_interval=20, ping_timeout=10) — bereits in Code umgesetzt.
+3) WebSocket Disconnects alle 60s
+Fix: Ist bereits gelöst → run_forever(ping_interval=20, ping_timeout=10) aktiv.
 
-4) Edge ist gesund, aber /readyz bleibt degraded
+4) /readyz bleibt degraded obwohl alles läuft
 Ursache: Noch kein WS-Event → _last_event_ts nicht gesetzt.
 
-Minimaler Test-Call auslösen:
+Test-Anruf auslösen:
 
 bash
 Code kopieren
 EDGE_ID=$(docker compose ps -q edge)
 docker exec -t "$EDGE_ID" asterisk -rx \
   'channel originate Local/43720270346@incoming application Echo'
-✅ Status
-Komponente	Zustand
-Edge	Healthy
-ARI Authentication	OK
-WebSocket Verbindung	Stabil
-Readiness Workflow	Aktiviert
+🟢 Systemstatus
+Komponente	Status
+Edge	✅ Healthy
+ARI Authentication	✅ OK
+WebSocket Verbindung	✅ Stabil
+Orchestrator Ready	✅ Aktiv
+
