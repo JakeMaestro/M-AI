@@ -65,23 +65,15 @@ def _ws_forever():
                     pass
                 log.info("WS: connected")
 
-    # auto-inserted pass to fix IndentationError
-    pass
-
-    app.state.is_ws_connected = True
-                global _is_ws_connected
-                _is_ws_connected = True
-                log.info("WS: connected")
-
             def on_close(ws, code, msg):
                 global _is_ws_connected
                 _is_ws_connected = False
-                log.warning(f"WS: closed code={code} msg={msg}")
+                log.warning("WS: closed code=%s msg=%s", code, msg)
 
             def on_error(ws, err):
                 global _is_ws_connected
                 _is_ws_connected = False
-                log.error(f"WS error: {err}")
+                log.error("WS error: %s", err)
 
             def on_message(ws, _msg):
                 # Presence; record we've seen traffic
@@ -98,26 +90,16 @@ def _ws_forever():
                 except Exception:
                     pass
 
-    ws.mark_event()
-                # Presence; record we've seen traffic
-                global _last_event_ts
-                _last_event_ts = time.time()
-                # Log a short summary (avoid noisy dumps)
-                try:
-                    if _msg and isinstance(_msg, (str, bytes)):
-                        s = _msg if isinstance(_msg, str) else _msg.decode(errors="ignore")
-                        log.info("WS evt: %s", s[:200])
-                except Exception:
-                    pass
-
             ws = websocket.WebSocketApp(
-    build_ari_ws_url(),
-    header=[build_ari_basic_header()],
-    on_open=on_open,
-    on_message=on_message,
-    on_error=on_error,
-    on_close=on_close,
-)
+                build_ari_ws_url(),
+                header=[build_ari_basic_header()],
+                on_open=on_open,
+                on_message=on_message,
+                on_error=on_error,
+                on_close=on_close,
+            )
+            wst = threading.Thread(target=ws.run_forever, kwargs={"ping_interval": 20, "ping_timeout": 10}, daemon=True)
+            wst.start()
             ws.run_forever(ping_interval=20, ping_timeout=10)
         except Exception:
             _is_ws_connected = False
