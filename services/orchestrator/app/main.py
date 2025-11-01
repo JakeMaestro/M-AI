@@ -1,7 +1,9 @@
+from app.routers import tts
 from app.routers import flow
 from app.routers import tenants
 from app.routers import scripts
 from app.ari.url import build_ari_ws_url, build_ari_basic_header
+from app.state import ws
 from app.routers import health
 import os, time, base64, threading, traceback, logging
 from fastapi import FastAPI
@@ -13,6 +15,7 @@ app = FastAPI(title="M-Voice Orchestrator", version="0.1.0")
 app.include_router(health.router)
 app.include_router(tenants.router)
 app.include_router(scripts.router)
+app.include_router(tts.router)
 app.include_router(flow.router)
 # Logger
 log = logging.getLogger("mvoice.orch")
@@ -56,19 +59,46 @@ def _ws_forever():
             def on_open(ws):
                 global _is_ws_connected
                 _is_ws_connected = True
+                try:
+                    app.state.is_ws_connected = True
+                except Exception:
+                    pass
+                log.info("WS: connected")
+
+    # auto-inserted pass to fix IndentationError
+    pass
+
+    app.state.is_ws_connected = True
+                global _is_ws_connected
+                _is_ws_connected = True
                 log.info("WS: connected")
 
             def on_close(ws, code, msg):
                 global _is_ws_connected
                 _is_ws_connected = False
-                log.warning("WS: closed code=%s msg=%s", code, msg)
+                log.warning(f"WS: closed code={code} msg={msg}")
 
             def on_error(ws, err):
                 global _is_ws_connected
                 _is_ws_connected = False
-                log.error("WS: error: %s", err)
+                log.error(f"WS error: {err}")
 
             def on_message(ws, _msg):
+                # Presence; record we've seen traffic
+                try:
+                    ws.mark_event()
+                except Exception:
+                    pass
+                global _last_event_ts
+                _last_event_ts = time.time()
+                try:
+                    if _msg and isinstance(_msg, (str, bytes)):
+                        s = _msg if isinstance(_msg, str) else _msg.decode(errors="ignore")
+                        log.info("WS evt: %s", s[:200])
+                except Exception:
+                    pass
+
+    ws.mark_event()
                 # Presence; record we've seen traffic
                 global _last_event_ts
                 _last_event_ts = time.time()
