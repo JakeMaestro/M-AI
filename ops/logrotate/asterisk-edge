@@ -1,0 +1,25 @@
+/home/azureuser/voiceai-public/services/edge/var/log/asterisk/messages {
+  su root root
+  daily
+  rotate 7
+  missingok
+  notifempty
+  compress
+  postrotate
+    /usr/bin/docker exec "$(docker compose -f /home/azureuser/voiceai-public/docker-compose.yml ps -q edge)" \
+      asterisk -rx "logger reload" >/dev/null 2>&1 || true
+  endscript
+}
+
+/home/azureuser/voiceai-public/services/edge/var/log/asterisk/security {
+  su root root
+  weekly
+  rotate 4
+  missingok
+  notifempty
+  compress
+  postrotate
+    /usr/bin/docker exec "$(docker compose -f /home/azureuser/voiceai-public/docker-compose.yml ps -q edge)" \
+      asterisk -rx "logger reload" >/dev/null 2>&1 || true
+  endscript
+}

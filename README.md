@@ -1,132 +1,46 @@
+# M-AI (Edge + Orchestrator)
 
-# M-Voice — SIP→Azure Speech MVP (Starter)
-
-This repository is a **minimal, Docker-first scaffold** to build an MVP for a
-phone-accessible AI assistant that connects SIP calls to Azure Speech and handles
-simple workflows (e.g., restaurant reservations, pizza ordering, appointment booking).
-
-> **Status:** Starter kit and placeholders — safe to commit to GitHub and iterate.
+A minimal, reboot-tauglicher Voice/Telephony Edge mit Asterisk + ARI und ein leichtgewichtiger Orchestrator (FastAPI/Uvicorn).  
+Ziel: stabile Inbound-Calls, ARI-App „mai“, sauberes Logging, Health-Gates und einfache Betriebsführung.
 
 ---
 
-## What’s inside
+## Architektur
 
-- `docker-compose.yml` — runs all services for local/dev on a single Ubuntu host.
-- `services/edge/` — SIP edge (Asterisk) config placeholders.
-- `services/orchestrator/` — Python FastAPI app that:
-  - Receives audio streams (via WebSocket / HTTP placeholders),
-  - Calls Azure Speech (STT/TTS) — integration points defined,
-  - Implements a **menu-based MVP**,
-  - Emits call events + transcripts.
-- `flows/` — Human-readable YAML **workflows** that non-engineers can edit.
-- `config/.env.example` — All environment variables to copy to `.env`.
-- `ops/github-actions/` — Example CI pipeline that lints & builds images.
-- `docs/` — Architecture and operations notes.
+- **edge**  
+  - Image: `m-voice-edge:v0.2.8`
+  - Asterisk 18 + HTTP/ARI (`:8088`), SIP/UDP (`:5060`), RTP (`10000-10049/udp`)
+  - ARI-App: `/opt/mai/ari_app.py` (Application Name: `mai`)
+  - Dialplan: `extensions.conf` → `Stasis(mai,incoming)`; **Fallback** via `TryExec(...)`
+  - Konfigurations-Mount **read-only**: `./services/edge/etc/asterisk:/etc/asterisk:ro`
+  - Logs auf Host:  
+    - Asterisk: `./services/edge/var/log/asterisk/{full,messages,security,queue_log}`  
+    - ARI-App: `./services/edge/var/log/mvoice/ari_app.log`
 
----
-
-## Quick start (dev)
-
-1. **Prereqs on Ubuntu 22.04+**  
-   ```bash
-   sudo apt-get update
-   sudo apt-get install -y git docker.io docker-compose-plugin
-   sudo usermod -aG docker $USER && newgrp docker
-   ```
-
-2. **Clone & configure**  
-   ```bash
-   git clone <YOUR_GITHUB_FORK_URL> mvoice
-   cd mvoice
-   cp config/.env.example config/.env
-   # Edit config/.env and fill in Azure keys & SIP trunk details
-   ```
-
-3. **Bring services up**  
-   ```bash
-   docker compose up -d --build
-   docker compose logs -f orchestrator
-   ```
-
-4. **Sanity check**  
-   - Visit `http://localhost:8080/docs` for the Orchestrator API (FastAPI docs).
-   - Place a test call to your SIP DID (after you configure your trunk to the edge).
+- **orchestrator**  
+  - Image-Name: `m-ai-orchestrator` (lokal gebaut)
+  - Port: `18080->8080`
+  - Konfiguration: `./config/.env`
+  - Flows: `./flows:/app/flows:ro`
 
 ---
 
-## MVP scope
+## Voraussetzungen
 
-- Inbound call → greeting → simple DTMF menu (1=Reservation, 2=Order, 3=Appointment).  
-- Azure Speech STT for free-form slots (e.g., name, date, time, order items).  
-- Azure Speech TTS for responses.  
-- Store transcripts + outcomes in a local `sqlite` DB initially (Postgres later).
-
----
-
-## Workflows (editable by customers)
-
-Workflows live in `flows/*.yaml`. They define:
-- Prompts and menus,
-- Business hours (open/closed),
-- Temporary messages (“Kebap ist aus”), and
-- A toggle to **pause** the service per customer.
-
-Non-technical users can change these with a small admin panel (to be added).
+- Docker & Docker Compose
+- Ubuntu 24.04 (getestet)
+- Offener UDP-Portbereich `10000-10049` für RTP (Firewall)
 
 ---
 
-## Roadmap (suggested)
+## Installation / Update
 
-- Phase 0 (MVP): Menu IVR + STT/TTS + SQLite.
-- Phase 1: Replace menu with intent routing; add Postgres + Redis.
-- Phase 2: Multi-tenant config; customer Admin Portal (Next.js).
-- Phase 3: Call recording, analytics, and queueing.
-- Phase 4: High availability (2× edges + SBC) and regional scaling.
-
-See `docs/architecture.md` for details.
-
-## MVP Runbook
-
-### Start
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
-```
-
-### Checks
-```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge asterisk -rx "http show status"
-docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge asterisk -rx "pjsip show registrations"
-```
-
-### Logs
-```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml logs -f edge
-docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge tail -n 200 /var/log/mvoice/ari_app.log
-```
-
-## Operate
-
-### Restart the stack
-sudo systemctl restart m-ai.service
-# or locally:
-cd ~/voiceai-public && docker compose down && docker compose up -d
-
-### Health check
-docker compose -f ~/voiceai-public/docker-compose.yml ps
-EDGE_ID=$(docker compose -f ~/voiceai-public/docker-compose.yml ps -q edge)
-docker inspect "$EDGE_ID" --format 'Health={{.State.Health.Status}}'
-docker exec -t "$EDGE_ID" asterisk -rx "pjsip show registrations"
-docker exec -t "$EDGE_ID" asterisk -rx "ari show apps"
-
-### Update (keep edge pinned, refresh orchestrator)
+# Klonen / Update
+git clone https://github.com/JakeMaestro/M-AI.git ~/voiceai-public
 cd ~/voiceai-public
 git pull
-docker compose build orchestrator
-docker compose up -d orchestrator
 
-### Logs & rotation (host-managed)
-# ARI app logs (weekly x4):   ~/voiceai-public/services/edge/var/log/mvoice/ari_app.log
-# Asterisk logs (daily/weekly): ~/voiceai-public/services/edge/var/log/asterisk/{messages,security}
-# force rotation (verbose):
-sudo logrotate -v /etc/logrotate.d/m-ai
-sudo logrotate -v /etc/logrotate.d/asterisk-edge
+# Build nur für Orchestrator (Edge ist pinbar)
+docker compose build orchestrator
+
