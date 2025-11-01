@@ -1,20 +1,28 @@
 services:
   edge:
     image: m-voice-edge:v0.2.8
-    pull_policy: never
     ports:
-      - "5060:5060/udp"               # SIP
-      - "8088:8088"                   # ARI/HTTP
-      - "10000-10049:10000-10049/udp" # RTP
+      - "5060:5060/udp"
+      - "8088:8088"
+      - "10000-10049:10000-10049/udp"
     volumes:
       - ./services/edge/etc/asterisk:/etc/asterisk
       - ./services/edge/var/lib/asterisk:/var/lib/asterisk
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8088/httpstatus"]
+      interval: 15s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
 
   orchestrator:
     image: m-ai-orchestrator
     build:
       context: ./services/orchestrator
+    depends_on:
+      edge:
+        condition: service_healthy
     ports:
       - "18080:8080"
     env_file:
@@ -22,6 +30,3 @@ services:
     volumes:
       - ./flows:/app/flows:ro
     restart: unless-stopped
-
-# health check (HTTP/ARI reachable)
-  # (indentation here assumes you're appending at file end; adjust if needed)
