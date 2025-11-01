@@ -6,7 +6,7 @@ from app.ari.url import build_ari_ws_url, build_ari_basic_header
 from app.state import ws
 from app.routers import health
 import os, time, base64, threading, traceback, logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 app = FastAPI(title="M-Voice Orchestrator", version="0.1.0")
@@ -80,6 +80,12 @@ def _ws_forever():
                 log.error("WS error: %s", err)
 
             def on_message(ws, _msg):
+    # Enqueue events only when we are leader
+    try:
+        if leader_lock.is_leader:
+            enqueue_event(_msg)
+    except Exception:
+        pass
                 try:
                     ws.mark_event()
                 except Exception:
@@ -136,7 +142,8 @@ def ready():
         ok = _is_ws_connected and (time.time() - _last_event_ts < 60 if _last_event_ts else True)
     except NameError:
         ok = False
-    payload = {
+    set_leader_flag(leader_lock.is_leader)
+payload = {"role": ("leader" if leader_lock.is_leader else "follower"),
         "status": "ok" if ok else "degraded",
         "ws_connected": bool(globals().get("_is_ws_connected", False)),
         "last_event_age": (time.time() - _last_event_ts) if globals().get("_last_event_ts") else None,
@@ -164,3 +171,15 @@ def healthz():
 def readyz():
     # Alias to /ready for k8s-style probes
     return ready()
+
+leader_lock = LeaderLock()
+
+@app.on_event(\"startup\")
+async def on_startup():
+    await leader_lock.start()
+    await start_workers()
+
+@app.on_event(\"shutdown\")
+async def on_shutdown():
+    await stop_workers()
+    await leader_lock.stop()
