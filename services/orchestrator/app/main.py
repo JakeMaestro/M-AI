@@ -64,11 +64,19 @@ def _ws_forever():
                 except Exception:
                     pass
                 log.info("WS: connected")
+    try:
+        ws.mark_connected(True)
+    except Exception:
+        pass
 
             def on_close(ws, code, msg):
                 global _is_ws_connected
                 _is_ws_connected = False
                 log.warning("WS: closed code=%s msg=%s", code, msg)
+    try:
+        ws.mark_connected(False)
+    except Exception:
+        pass
 
             def on_error(ws, err):
                 global _is_ws_connected
