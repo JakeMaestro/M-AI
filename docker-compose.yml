@@ -22,3 +22,6 @@ services:
     volumes:
       - ./flows:/app/flows:ro
     restart: unless-stopped
+
+# health check (HTTP/ARI reachable)
+  # (indentation here assumes you're appending at file end; adjust if needed)
