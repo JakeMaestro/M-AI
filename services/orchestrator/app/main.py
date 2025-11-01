@@ -1,3 +1,6 @@
+from app.routers import flow
+from app.routers import tenants
+from app.routers import scripts
 from app.ari.url import build_ari_ws_url, build_ari_basic_header
 from app.routers import health
 import os, time, base64, threading, traceback, logging
@@ -8,6 +11,9 @@ app = FastAPI(title="M-Voice Orchestrator", version="0.1.0")
 
 
 app.include_router(health.router)
+app.include_router(tenants.router)
+app.include_router(scripts.router)
+app.include_router(flow.router)
 # Logger
 log = logging.getLogger("mvoice.orch")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
