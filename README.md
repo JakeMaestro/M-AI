@@ -103,3 +103,30 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge
 docker compose -f docker-compose.yml -f docker-compose.override.yml logs -f edge
 docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T edge tail -n 200 /var/log/mvoice/ari_app.log
 ```
+
+## Operate
+
+### Restart the stack
+sudo systemctl restart m-ai.service
+# or locally:
+cd ~/voiceai-public && docker compose down && docker compose up -d
+
+### Health check
+docker compose -f ~/voiceai-public/docker-compose.yml ps
+EDGE_ID=$(docker compose -f ~/voiceai-public/docker-compose.yml ps -q edge)
+docker inspect "$EDGE_ID" --format 'Health={{.State.Health.Status}}'
+docker exec -t "$EDGE_ID" asterisk -rx "pjsip show registrations"
+docker exec -t "$EDGE_ID" asterisk -rx "ari show apps"
+
+### Update (keep edge pinned, refresh orchestrator)
+cd ~/voiceai-public
+git pull
+docker compose build orchestrator
+docker compose up -d orchestrator
+
+### Logs & rotation (host-managed)
+# ARI app logs (weekly x4):   ~/voiceai-public/services/edge/var/log/mvoice/ari_app.log
+# Asterisk logs (daily/weekly): ~/voiceai-public/services/edge/var/log/asterisk/{messages,security}
+# force rotation (verbose):
+sudo logrotate -v /etc/logrotate.d/m-ai
+sudo logrotate -v /etc/logrotate.d/asterisk-edge
