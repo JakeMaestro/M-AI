@@ -6,6 +6,7 @@ from app.ari.url import build_ari_ws_url, build_ari_basic_header
 from app.state import ws
 from app.routers import health
 import os, time, base64, threading, traceback, logging
+from app.util.leader import LeaderLock
 from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
@@ -115,17 +116,7 @@ def _ws_forever():
         time.sleep(min(backoff, 30))
         backoff = min(backoff * 2, 30)
 
-@app.on_event("startup")
-def _startup():
-    log.info("Starting WS background thread…")
-    t = threading.Thread(target=_ws_forever, daemon=True)
-    t.start()
 
-@app.on_event("shutdown")
-def _shutdown():
-    global _stop
-    _stop = True
-    log.info("Stopping WS background thread…")
 
 @app.get("/health")
 def health():
@@ -143,7 +134,8 @@ def ready():
     except NameError:
         ok = False
     set_leader_flag(leader_lock.is_leader)
-payload = {"role": ("leader" if leader_lock.is_leader else "follower"),
+payload = {
+        "role": ("leader" if leader_lock.is_leader else "follower"),"role": ("leader" if leader_lock.is_leader else "follower"),
         "status": "ok" if ok else "degraded",
         "ws_connected": bool(globals().get("_is_ws_connected", False)),
         "last_event_age": (time.time() - _last_event_ts) if globals().get("_last_event_ts") else None,
@@ -183,3 +175,21 @@ async def on_startup():
 async def on_shutdown():
     await stop_workers()
     await leader_lock.stop()
+
+@app.on_event("startup")
+async def __on_startup():
+    # Leader-Lock starten
+    try:
+        await leader_lock.start()
+    except Exception as e:
+        import logging
+        logging.getLogger("leader").warning(f"Leader lock start error: {e}")
+
+@app.on_event("shutdown")
+async def __on_shutdown():
+    # Leader-Lock stoppen
+    try:
+        await leader_lock.stop()
+    except Exception as e:
+        import logging
+        logging.getLogger("leader").warning(f"Leader lock stop error: {e}")
