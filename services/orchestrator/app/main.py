@@ -60,23 +60,19 @@ def _ws_forever():
                 global _is_ws_connected
                 _is_ws_connected = True
                 try:
-                    app.state.is_ws_connected = True
+                    ws.mark_connected(True)
                 except Exception:
                     pass
                 log.info("WS: connected")
-    try:
-        ws.mark_connected(True)
-    except Exception:
-        pass
 
             def on_close(ws, code, msg):
                 global _is_ws_connected
                 _is_ws_connected = False
+                try:
+                    ws.mark_connected(False)
+                except Exception:
+                    pass
                 log.warning("WS: closed code=%s msg=%s", code, msg)
-    try:
-        ws.mark_connected(False)
-    except Exception:
-        pass
 
             def on_error(ws, err):
                 global _is_ws_connected
@@ -84,7 +80,6 @@ def _ws_forever():
                 log.error("WS error: %s", err)
 
             def on_message(ws, _msg):
-                # Presence; record we've seen traffic
                 try:
                     ws.mark_event()
                 except Exception:
@@ -106,8 +101,6 @@ def _ws_forever():
                 on_error=on_error,
                 on_close=on_close,
             )
-            wst = threading.Thread(target=ws.run_forever, kwargs={"ping_interval": 20, "ping_timeout": 10}, daemon=True)
-            wst.start()
             ws.run_forever(ping_interval=20, ping_timeout=10)
         except Exception:
             _is_ws_connected = False
@@ -132,13 +125,23 @@ def _shutdown():
 def health():
     return JSONResponse({"ws_connected": _is_ws_connected})
 
+
 @app.get("/ready")
 def ready():
-    """Readiness: WS must be up and (best-effort) we saw an event in last 60s."""
-    ok = _is_ws_connected and (time.time() - _last_event_ts < 60 if _last_event_ts else True)
-    status = 200 if ok else 503
-    return PlainTextResponse("ready" if ok else "not-ready", status_code=status)
-
+    """
+    Readiness: WS must be connected and (best-effort) we saw an event in last 60s.
+    Returns structured JSON for probes and humans.
+    """
+    try:
+        ok = _is_ws_connected and (time.time() - _last_event_ts < 60 if _last_event_ts else True)
+    except NameError:
+        ok = False
+    payload = {
+        "status": "ok" if ok else "degraded",
+        "ws_connected": bool(globals().get("_is_ws_connected", False)),
+        "last_event_age": (time.time() - _last_event_ts) if globals().get("_last_event_ts") else None,
+    }
+    return JSONResponse(payload)
 @app.get("/metrics")
 def metrics():
     """Tiny text metrics."""
@@ -148,3 +151,16 @@ def metrics():
         f'mvoice_last_event_ts {_last_event_ts or 0.0}',
     ]
     return PlainTextResponse("\n".join(lines), media_type="text/plain")
+
+
+@app.get("/healthz")
+def healthz():
+    return health()
+
+
+
+
+@app.get("/readyz")
+def readyz():
+    # Alias to /ready for k8s-style probes
+    return ready()

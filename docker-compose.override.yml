@@ -1,0 +1,21 @@
+services:
+  edge:
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "asterisk -rx 'core show uptime' >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  orchestrator:
+    environment:
+      READYZ_EVENT_TTL: "300"  # readiness stays OK for 5 min after last ARI event
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      edge:
+        condition: service_healthy
