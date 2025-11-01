@@ -2,20 +2,24 @@ services:
   edge:
     image: m-voice-edge:v0.2.8
     ports:
-      - "5060:5060/udp"
-      - "8088:8088"
-      - "10000-10049:10000-10049/udp"
+    - 5060:5060/udp
+    - 8088:8088
+    - 10000-10049:10000-10049/udp
     volumes:
-      - ./services/edge/etc/asterisk:/etc/asterisk
-      - ./services/edge/var/lib/asterisk:/var/lib/asterisk
+    - ./services/edge/etc/asterisk:/etc/asterisk:ro
+    - ./services/edge/var/lib/asterisk:/var/lib/asterisk
+    - ./services/edge/var/log/asterisk:/var/log/asterisk
+    - ./services/edge/var/log/mvoice:/var/log/mvoice
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8088/httpstatus"]
+      test:
+      - CMD-SHELL
+      - asterisk -rx 'http show status' >/dev/null 2>&1 && asterisk -rx 'pjsip show
+        registrations' | tail -n +4 | tr -d '\r' | grep -qE 'Registered[[:space:]]*$'
       interval: 15s
       timeout: 3s
-      retries: 6
-      start_period: 15s
-
+      retries: 8
+      start_period: 45s
   orchestrator:
     image: m-ai-orchestrator
     build:
@@ -24,9 +28,9 @@ services:
       edge:
         condition: service_healthy
     ports:
-      - "18080:8080"
+    - 18080:8080
     env_file:
-      - ./config/.env
+    - ./config/.env
     volumes:
-      - ./flows:/app/flows:ro
+    - ./flows:/app/flows:ro
     restart: unless-stopped
