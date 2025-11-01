@@ -176,14 +176,17 @@ async def on_shutdown():
     await stop_workers()
     await leader_lock.stop()
 
+
+
+
 @app.on_event("startup")
 async def __on_startup():
     # Leader-Lock starten
     try:
         await leader_lock.start()
     except Exception as e:
-        import logging
-        logging.getLogger("leader").warning(f"Leader lock start error: {e}")
+        logging.getLogger("leader").warning("Leader lock start error: %s", e)
+
 
 @app.on_event("shutdown")
 async def __on_shutdown():
@@ -191,5 +194,4 @@ async def __on_shutdown():
     try:
         await leader_lock.stop()
     except Exception as e:
-        import logging
-        logging.getLogger("leader").warning(f"Leader lock stop error: {e}")
+        logging.getLogger("leader").warning("Leader lock stop error: %s", e)
