@@ -1,9 +1,13 @@
+from app.ari.url import build_ari_ws_url, build_ari_basic_header
+from app.routers import health
 import os, time, base64, threading, traceback, logging
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 app = FastAPI(title="M-Voice Orchestrator", version="0.1.0")
 
+
+app.include_router(health.router)
 # Logger
 log = logging.getLogger("mvoice.orch")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -71,13 +75,13 @@ def _ws_forever():
                     pass
 
             ws = websocket.WebSocketApp(
-                url,
-                header=headers,
-                on_open=on_open,
-                on_close=on_close,
-                on_error=on_error,
-                on_message=on_message,
-            )
+    build_ari_ws_url(),
+    header=[build_ari_basic_header()],
+    on_open=on_open,
+    on_message=on_message,
+    on_error=on_error,
+    on_close=on_close,
+)
             ws.run_forever(ping_interval=20, ping_timeout=10)
         except Exception:
             _is_ws_connected = False
