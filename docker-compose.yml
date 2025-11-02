@@ -28,7 +28,7 @@ services:
       edge:
         condition: service_healthy
     ports:
-    - 18080:8080
+    - 18080:8000
     env_file:
     - ./config/.env
     volumes:
@@ -39,7 +39,7 @@ services:
       - CMD
       - curl
       - -sf
-      - http://127.0.0.1:8080/readyz
+      - http://127.0.0.1:8000/readyz
       interval: 10s
       timeout: 3s
       retries: 6

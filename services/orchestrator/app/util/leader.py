@@ -1,11 +1,13 @@
-import asyncio, aioredis, os, time, logging
+import asyncio, os, time, logging
+import redis.asyncio as aioredis
+
 log = logging.getLogger("leader")
 
 class LeaderLock:
     def __init__(self):
         self.redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
-        self.key = os.getenv("LOCK_KEY", "ari-leader")
-        self.ttl = int(os.getenv("LOCK_TTL", "15"))
+        self.key   = os.getenv("LOCK_KEY", "ari-leader")
+        self.ttl   = int(os.getenv("LOCK_TTL", "15"))
         self.renew = int(os.getenv("LOCK_RENEW", "5"))
         self._is_leader = False
         self._stop = False
@@ -13,7 +15,7 @@ class LeaderLock:
         self._client = None
 
     async def start(self):
-        self._client = await aioredis.from_url(self.redis_url)
+        self._client = aioredis.from_url(self.redis_url)
         self._task = asyncio.create_task(self._loop())
 
     async def stop(self):
@@ -21,7 +23,13 @@ class LeaderLock:
         if self._task:
             self._task.cancel()
         if self._client:
-            await self._client.close()
+            try:
+                await self._client.close()
+            except Exception:
+                try:
+                    await self._client.connection_pool.disconnect()
+                except Exception:
+                    pass
 
     async def _loop(self):
         while not self._stop:
@@ -33,7 +41,6 @@ class LeaderLock:
                         log.info("Acquired leader lock")
                     self._is_leader = True
                 elif self._is_leader:
-                    # try to renew
                     ttl = await self._client.ttl(self.key)
                     if ttl and ttl < self.renew:
                         await self._client.expire(self.key, self.ttl)

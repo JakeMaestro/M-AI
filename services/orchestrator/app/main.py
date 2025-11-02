@@ -1,78 +1,59 @@
-from app.routers import tts
-from app.routers import flow
-from app.routers import tenants
-from app.routers import scripts
-from app.ari.url import build_ari_ws_url, build_ari_basic_header
-from app.state import ws
-from app.routers import health
-import os, time, base64, threading, traceback, logging
-from app.util.leader import LeaderLock
-from fastapi import FastAPI, Response
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse, PlainTextResponse
+import logging, time, os, base64, traceback, threading
 
-app = FastAPI(title="M-Voice Orchestrator", version="0.1.0")
+from app.util.leader import LeaderLock
+from app.ari.url import build_ari_ws_url, build_ari_basic_header
 
+# ---- Globals used by health router ----
+_is_ws_connected = False
+_last_event_ts = 0.0
+_ws_restarts = 0
 
+app = FastAPI(title="M-AI Orchestrator", version=os.getenv("APP_VERSION", "dev"))
+
+# Routers (nach Globals importieren)
+from app.routers import tenants, scripts, tts, flow, health  # noqa: E402
 app.include_router(health.router)
 app.include_router(tenants.router)
 app.include_router(scripts.router)
 app.include_router(tts.router)
 app.include_router(flow.router)
-# Logger
+
+# Logging
 log = logging.getLogger("mvoice.orch")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-_is_ws_connected = False
-_stop = False
-_last_event_ts = 0.0
-_ws_restarts = 0
-
-def _build_ws_url():
-    u = os.getenv("ARI_USERNAME", "mvoice")
-    p = os.getenv("ARI_PASSWORD", "mvoice8908!#")
-    appname = os.getenv("ARI_APP", "mvoice")
-    base = os.getenv("ARI_URL", "http://edge:8088/ari").rstrip("/")
-
-    scheme = "wss" if base.startswith("https://") else "ws"
-    host = base.split("://", 1)[1]
-    if not host.endswith("/ari"):
-        host += "/ari"
-    url = f"{scheme}://{host}/events?app={appname}&subscribeAll=true"
-    token = base64.b64encode(f"{u}:{p}".encode()).decode()
-    headers = [f"Authorization: Basic {token}"]
-    return url, headers
+leader_lock = LeaderLock()
+_stop_ws = False
 
 def _ws_forever():
-    """
-    Persistent ARI WebSocket with keepalives and bounded backoff.
-    Presence is enough to keep Stasis(app) active.
-    """
-    global _is_ws_connected, _ws_restarts
-    import websocket  # websocket-client
+    """Persistent ARI WebSocket (best-effort). Presence reicht für Readiness."""
+    global _is_ws_connected, _ws_restarts, _last_event_ts
+    try:
+        import websocket  # websocket-client
+    except Exception as e:
+        log.warning(f"websocket-client not available: {e}")
+        return
 
     backoff = 1
-    while not _stop:
+    while not _stop_ws:
         try:
-            url, headers = _build_ws_url()
+            url = build_ari_ws_url()
+            headers = [build_ari_basic_header()]
             log.info("WS: connecting to %s", url)
             _ws_restarts += 1
 
             def on_open(ws):
+                nonlocal backoff
                 global _is_ws_connected
                 _is_ws_connected = True
-                try:
-                    ws.mark_connected(True)
-                except Exception:
-                    pass
+                backoff = 1
                 log.info("WS: connected")
 
             def on_close(ws, code, msg):
                 global _is_ws_connected
                 _is_ws_connected = False
-                try:
-                    ws.mark_connected(False)
-                except Exception:
-                    pass
                 log.warning("WS: closed code=%s msg=%s", code, msg)
 
             def on_error(ws, err):
@@ -81,28 +62,17 @@ def _ws_forever():
                 log.error("WS error: %s", err)
 
             def on_message(ws, _msg):
-    # Enqueue events only when we are leader
-    try:
-        if leader_lock.is_leader:
-            enqueue_event(_msg)
-    except Exception:
-        pass
-                try:
-                    ws.mark_event()
-                except Exception:
-                    pass
                 global _last_event_ts
                 _last_event_ts = time.time()
                 try:
-                    if _msg and isinstance(_msg, (str, bytes)):
-                        s = _msg if isinstance(_msg, str) else _msg.decode(errors="ignore")
-                        log.info("WS evt: %s", s[:200])
+                    s = _msg if isinstance(_msg, str) else _msg.decode(errors="ignore")
+                    log.debug("WS evt: %s", s[:200])
                 except Exception:
                     pass
 
             ws = websocket.WebSocketApp(
-                build_ari_ws_url(),
-                header=[build_ari_basic_header()],
+                url,
+                header=headers,
                 on_open=on_open,
                 on_message=on_message,
                 on_error=on_error,
@@ -116,82 +86,28 @@ def _ws_forever():
         time.sleep(min(backoff, 30))
         backoff = min(backoff * 2, 30)
 
-
-
-@app.get("/health")
-def health():
-    return JSONResponse({"ws_connected": _is_ws_connected})
-
-
-@app.get("/ready")
-def ready():
-    """
-    Readiness: WS must be connected and (best-effort) we saw an event in last 60s.
-    Returns structured JSON for probes and humans.
-    """
-    try:
-        ok = _is_ws_connected and (time.time() - _last_event_ts < 60 if _last_event_ts else True)
-    except NameError:
-        ok = False
-    set_leader_flag(leader_lock.is_leader)
-payload = {
-        "role": ("leader" if leader_lock.is_leader else "follower"),"role": ("leader" if leader_lock.is_leader else "follower"),
-        "status": "ok" if ok else "degraded",
-        "ws_connected": bool(globals().get("_is_ws_connected", False)),
-        "last_event_age": (time.time() - _last_event_ts) if globals().get("_last_event_ts") else None,
-    }
-    return JSONResponse(payload)
-@app.get("/metrics")
-def metrics():
-    """Tiny text metrics."""
-    lines = [
-        f'mvoice_ws_connected {int(_is_ws_connected)}',
-        f'mvoice_ws_restarts {_ws_restarts}',
-        f'mvoice_last_event_ts {_last_event_ts or 0.0}',
-    ]
-    return PlainTextResponse("\n".join(lines), media_type="text/plain")
-
-
-@app.get("/healthz")
-def healthz():
-    return health()
-
-
-
-
-@app.get("/readyz")
-def readyz():
-    # Alias to /ready for k8s-style probes
-    return ready()
-
-leader_lock = LeaderLock()
-
-@app.on_event(\"startup\")
-async def on_startup():
-    await leader_lock.start()
-    await start_workers()
-
-@app.on_event(\"shutdown\")
-async def on_shutdown():
-    await stop_workers()
-    await leader_lock.stop()
-
-
-
-
 @app.on_event("startup")
-async def __on_startup():
-    # Leader-Lock starten
+async def _on_startup():
     try:
         await leader_lock.start()
     except Exception as e:
-        logging.getLogger("leader").warning("Leader lock start error: %s", e)
-
+        log.warning("Leader lock start error: %s", e)
+    threading.Thread(target=_ws_forever, name="ws-ari", daemon=True).start()
 
 @app.on_event("shutdown")
-async def __on_shutdown():
-    # Leader-Lock stoppen
+async def _on_shutdown():
+    global _stop_ws
+    _stop_ws = True
     try:
         await leader_lock.stop()
     except Exception as e:
-        logging.getLogger("leader").warning("Leader lock stop error: %s", e)
+        log.warning("Leader lock stop error: %s", e)
+
+@app.get("/metrics")
+def metrics():
+    lines = [
+        f"mvoice_ws_connected {int(_is_ws_connected)}",
+        f"mvoice_ws_restarts {_ws_restarts}",
+        f"mvoice_last_event_ts {_last_event_ts or 0.0}",
+    ]
+    return PlainTextResponse("\n".join(lines), media_type="text/plain")

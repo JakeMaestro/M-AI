@@ -13,5 +13,5 @@ websocket-client>=1.6
 aiohttp>=3.9
 PyYAML>=6.0
 openai>=1.55.0
-aioredis
+redis>=4.6.0
 prometheus-client
