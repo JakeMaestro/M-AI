@@ -1,4 +1,4 @@
-from app.main import _is_ws_connected, _last_event_ts
+import app.main as main
 import time
 from fastapi import APIRouter
 import os, socket, time
@@ -59,7 +59,7 @@ def readyz():
     except NameError:
         # Falls _ari_auth_ok aus irgendeinem Grund fehlt, als degraded werten
         ari_ok = False
-    ws_ok = bool(_is_ws_connected) and ( (time.time() - _last_event_ts) < 60 if _last_event_ts else True )
+    ws_ok = bool(main._is_ws_connected) and ( (time.time() - main._last_event_ts) < 60 if main._last_event_ts else True )
     return {
         "status": "ok" if (edge_ok and ari_ok and ws_ok) else "degraded",
         "edge_http_reachable": edge_ok,
