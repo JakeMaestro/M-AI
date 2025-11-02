@@ -1,26 +1,14 @@
-FROM ubuntu:22.04
+FROM m-voice-edge:v0.2.8
 
-ENV DEBIAN_FRONTEND=noninteractive
+# Pakete für TTS/Convert
+RUN apt-get update -qq && \
+    apt-get install -y -qq jq sox libsox-fmt-all curl file && \
+    rm -rf /var/lib/apt/lists/*
 
-# Asterisk + Python Runtime + Tools
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      tzdata \
-      asterisk asterisk-core-sounds-en asterisk-moh-opsound-wav \
-      python3 python3-pip ca-certificates curl \
- && ln -fs /usr/share/zoneinfo/Europe/Vienna /etc/localtime \
- && dpkg-reconfigure --frontend noninteractive tzdata \
- && pip3 install --no-cache-dir requests websocket-client \
- && rm -rf /var/lib/apt/lists/*
+# Boot-Script + TTS-Script einspielen
+COPY boot/voiceai-boot.sh /usr/local/bin/voiceai-boot.sh
+COPY bin/tts_fetch.sh      /usr/local/bin/tts_fetch.sh
+RUN chmod 0755 /usr/local/bin/voiceai-boot.sh /usr/local/bin/tts_fetch.sh
 
-# Asterisk-Configs ins Image
-COPY etc/asterisk/ /etc/asterisk/
-
-# ARI-App ins Image
-COPY ari_app.py /opt/mai/ari_app.py
-
-# Entrypoint für Autostart (ARI-App + Asterisk im Vordergrund)
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
+# Unser Boot-Script startet am Ende das originale /entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/voiceai-boot.sh"]

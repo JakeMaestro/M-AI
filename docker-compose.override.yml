@@ -1,60 +1,20 @@
 services:
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "5"
-
   edge:
+    build:
+      context: ./services/edge
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "bash", "-lc", "asterisk -rx 'core show uptime' >/dev/null 2>&1"]
-      interval: 15s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "5"
+      test: ["CMD", "asterisk", "-rx", "core show channels concise"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     volumes:
-      - edge_astdb:/var/lib/asterisk
-
-  orchestrator:
-    restart: unless-stopped
+      # nur diese eine Datei mounten (keine Komplett-Übersteuerung von /etc/asterisk)
+      - ./services/edge/etc/asterisk/extensions.conf:/etc/asterisk/extensions.conf:ro
+      # Sounds inkl. Cache persistent
+      - ./services/edge/asterisk/sounds:/var/lib/asterisk/sounds
     environment:
-      READYZ_EVENT_TTL: "300"          # Readiness-Fenster (Sekunden)
-      REDIS_URL: "redis://redis:6379/0"
-      LOCK_KEY: "ari-leader"
-      LOCK_TTL: "15"
-      LOCK_RENEW: "5"
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
-      interval: 20s
-      timeout: 3s
-      retries: 5
-      start_period: 20s
-    depends_on:
-      edge:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "5"
-
-volumes:
-  edge_astdb: {}
+      # Keys bleiben in .env, diese Zeilen sorgen nur für Durchreichung
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - ELEVENLABS_VOICE=${ELEVENLABS_VOICE}
+      - ELEVENLABS_MODEL=${ELEVENLABS_MODEL}
